@@ -62,7 +62,7 @@ inputs:
   sentinelctl-version:
     description: 'sentinelctl-linux version. Use to pin against the action major.'
     required: false
-    default: '1.4.1'
+    default: '1.5.0'
 
 outputs:
   sarif-path:

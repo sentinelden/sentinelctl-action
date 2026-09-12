@@ -46,7 +46,7 @@ crypto-misuse detection, and a policy gate that can fail the build.
 | `severity-threshold` | `high` | Non-zero exit at this severity or above |
 | `license-key` | empty | Optional. Without one it runs in preview mode |
 | `output-dir` | `sentinel-reports` | Where reports are written |
-| `sentinelctl-version` | `1.5.0` | Pin against the action major |
+| `sentinelctl-version` | `1.6.0` | Pin against the action major |
 
 ## Outputs
 

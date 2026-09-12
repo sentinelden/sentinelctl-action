@@ -59,10 +59,16 @@ inputs:
     description: 'Directory to write report artifacts into.'
     required: false
     default: 'sentinel-reports'
+  # NOTE: this default names a GitHub RELEASE TAG (cli-v<version>) in the
+  # sentinelctl-action repo, holding the LINUX build. It is a separate
+  # artifact line from the macOS universal binary on R2 / Homebrew, which
+  # is why the two version numbers differ. Bump this ONLY in the same
+  # change that publishes the matching cli-v<version> release: raise it
+  # first and every consumer's next run 404s on the download.
   sentinelctl-version:
     description: 'sentinelctl-linux version. Use to pin against the action major.'
     required: false
-    default: '1.5.0'
+    default: '1.6.0'
 
 outputs:
   sarif-path:
@@ -79,6 +85,7 @@ runs:
   using: composite
   steps:
     - name: Fetch sentinelctl
+      id: install
       shell: bash
       env:
         VERSION: ${{ inputs.sentinelctl-version }}
@@ -87,10 +94,11 @@ runs:
         ARCH=$(uname -m)
         case "$ARCH" in
           x86_64)  ASSET="sentinelctl-amd64" ;;
-          # No arm64 binary is published; the release workflow builds amd64
-          # only. Mapping aarch64 to a nonexistent asset made arm64 runners
-          # fail later with "check that a release exists", pointing the user at
-          # the wrong problem. ACTION.md already promises a clear message.
+          # No arm64 binary is published: release-linux-cli.yml builds amd64
+          # only. Mapping aarch64 to a nonexistent asset made arm64 runners fail
+          # later with "Could not download ... check that a release exists",
+          # which points the user at the wrong problem. ACTION.md already
+          # promises a clear architecture error, so give them one.
           aarch64|arm64)
             echo "::error::sentinelctl ships Linux x86_64 only. This runner is ${ARCH}."
             echo "::error::Use an x86_64 runner (ubuntu-latest is x86_64)."
@@ -101,44 +109,83 @@ runs:
             exit 1
             ;;
         esac
-        # Fetched from THIS repo's own releases, published by CI in the
-        # private engine repo. The engine source stays private; only the
-        # compiled binary is distributed. `cli-v*` tags carry binaries and are
-        # deliberately distinct from the `v1` / `v1.x` tags users pin the
-        # action itself to.
         # Validate BEFORE the version reaches a URL. Without this, a value like
         # "../../attacker/repo/releases/download/v1.0.0" retargets the download,
-        # and because the .sha256 URL is derived from the same ${URL} prefix the
+        # and because the .sha256 is derived from the same ${URL} prefix the
         # attacker supplies a matching checksum too. The integrity gate below
-        # then prints "checksum verified", chmod +x's the file and runs it
-        # against the caller's build artifact with the job's secrets in scope.
-        # A bypassed control is worse than no control.
+        # then prints "checksum verified" and executes their binary with the
+        # job's secrets in scope. A bypassed control is worse than no control.
         #
-        # Reachable without write access to a protected workflow file:
-        # workflow_dispatch inputs, reusable-workflow and composite-action
+        # The value is attacker-reachable without write access to the workflow
+        # file: workflow_dispatch inputs, reusable-workflow and composite-action
         # parameters, and repository or organization variables all feed it.
+        #
+        # Same expression as release-linux-cli.yml:51, deliberately: the version
+        # that can be published and the version that can be requested must agree.
         if ! printf '%s' "$VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
           echo "::error::sentinelctl-version '${VERSION}' is not a plain X.Y.Z version."
           exit 1
         fi
 
+        # A shape check alone is not enough: any older published version is
+        # still well-formed, so whoever controls the input can silently pin the
+        # CI gate to an engine that predates the detectors it is supposed to
+        # run. Enforce a floor as well as a shape.
+        MIN_VERSION="1.5.0"
+        if [ "$(printf '%s\n%s\n' "$MIN_VERSION" "$VERSION" | sort -V | head -1)" != "$MIN_VERSION" ]; then
+          echo "::error::sentinelctl-version '${VERSION}' is older than the minimum supported ${MIN_VERSION}."
+          echo "::error::Older engines miss detectors this action's results are assumed to include."
+          exit 1
+        fi
+
+        # Binaries are promoted to the PUBLIC action repo under a cli-v tag by
+        # Scripts/promote-cli.sh. This previously pointed at
+        # sentinelden/sentinelctl-linux, which does not exist and returns 404,
+        # so this file had drifted from the action actually published.
         URL="https://github.com/sentinelden/sentinelctl-action/releases/download/cli-v${VERSION}/${ASSET}"
 
-        if ! curl -sSLf -o /tmp/sentinelctl "$URL"; then
+        # Stage under RUNNER_TEMP, not a fixed /tmp path. On a shared or
+        # self-hosted runner, /tmp/sentinelctl is guessable and world-writable:
+        # another local user or a concurrent job can pre-create it as a symlink
+        # so curl writes through to a path they choose, or swap the file between
+        # the checksum and the exec. RUNNER_TEMP is per-job and not shared.
+        STAGE="${RUNNER_TEMP:-/tmp}/sentinelctl-${VERSION}-$$"
+        rm -f "$STAGE" "$STAGE.sha256"
+        if ! curl -sSLf -o "$STAGE" "$URL"; then
           echo "::error::Could not download sentinelctl ${VERSION} for ${ARCH}."
           echo "::error::Tried: ${URL}"
           echo "::error::Check that a release tagged cli-v${VERSION} exists with that asset."
           exit 1
         fi
 
+        # Expected digests, committed HERE rather than trusted from the release.
+        #
+        # The .sha256 published beside the binary comes from the same place the
+        # binary does, so anyone who can write one can write the other: the
+        # run-time check below catches corruption and CDN errors, not an
+        # attacker with release-write access. A digest committed in this file is
+        # covered by the consumer's own action pin (uses: ...@<sha>), so a later
+        # substitution of the release asset no longer matches.
+        #
+        # Honest limit: these values were read from the published releases at
+        # the time this table was written, and each was confirmed against the
+        # binary actually served. That freezes today's artifact; it is not an
+        # independent root of trust. Signing the release with a vendor key, and
+        # verifying that here, is the durable fix.
+        case "$VERSION" in
+          1.6.0) PINNED=970cd4a33c7d431bd48224d98484a7a6e17ed73cee3ed29283e84b2b03a2a5ef ;;
+          1.5.0) PINNED=f4d5fddc596a984e35aed048cd20e6301c47c9cf240e614df079636c42eeb0af ;;
+          *)     PINNED="" ;;
+        esac
+
         # Integrity check against the checksum published beside the binary.
         # This was previously a TODO that fetched a .sig and never verified
         # it, which is worse than no check: it looks verified and is not.
         # SHA-256 is what the release workflow actually publishes, so this
         # verifies something that exists rather than something aspirational.
-        if curl -sSLf -o /tmp/sentinelctl.sha256 "${URL}.sha256"; then
-          EXPECTED=$(grep -oE '[a-f0-9]{64}' /tmp/sentinelctl.sha256 | head -1)
-          ACTUAL=$(sha256sum /tmp/sentinelctl | cut -d' ' -f1)
+        if curl -sSLf -o "$STAGE.sha256" "${URL}.sha256"; then
+          EXPECTED=$(grep -oE '[a-f0-9]{64}' "$STAGE.sha256" | head -1)
+          ACTUAL=$(sha256sum "$STAGE" | cut -d' ' -f1)
           if [ -z "$EXPECTED" ]; then
             echo "::error::Published checksum file contained no SHA-256."
             exit 1
@@ -149,7 +196,19 @@ runs:
             echo "::error::actual   $ACTUAL"
             exit 1
           fi
-          echo "sentinelctl ${VERSION} checksum verified."
+          if [ -n "$PINNED" ] && [ "$PINNED" != "$ACTUAL" ]; then
+            echo "::error::sentinelctl ${VERSION} does not match the digest pinned in this action."
+            echo "::error::pinned $PINNED"
+            echo "::error::actual $ACTUAL"
+            echo "::error::The published release asset has changed since this action version was cut."
+            exit 1
+          fi
+          if [ -n "$PINNED" ]; then
+            echo "sentinelctl ${VERSION} verified against the digest pinned in this action."
+          else
+            echo "::warning::No pinned digest for ${VERSION} in this action version; verified only"
+            echo "::warning::against the checksum published beside the binary, which shares its origin."
+          fi
         else
           # Fail rather than warn. This action runs arbitrary downloaded code
           # against a customer's build artifact inside their CI; silently
@@ -158,12 +217,14 @@ runs:
           exit 1
         fi
 
-        chmod +x /tmp/sentinelctl
+        chmod +x "$STAGE"
+        echo "sentinelctl-path=$STAGE" >> "$GITHUB_OUTPUT"
 
     - name: Run audit
       id: run
       shell: bash
       env:
+        SENTINELCTL: ${{ steps.install.outputs.sentinelctl-path }}
         SENTINEL_LICENSE_KEY: ${{ inputs.license-key }}
         BINARY: ${{ inputs.binary }}
         OUTPUT_DIR: ${{ inputs.output-dir }}
@@ -177,7 +238,7 @@ runs:
         MD="$OUTPUT_DIR/sentinel-report.md"
 
         EXIT=0
-        /tmp/sentinelctl audit "$BINARY" \
+        "$SENTINELCTL" audit "$BINARY" \
           --min "$THRESHOLD" \
           --sarif "$SARIF" \
           --sbom "$SBOM" \

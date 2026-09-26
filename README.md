@@ -45,9 +45,10 @@ crypto-misuse detection, and a policy gate that can fail the build.
 | `binary` | required | Path to the `.ipa`, `.app`, `.apk`, `.aab` or Mach-O |
 | `severity-threshold` | `high` | Non-zero exit at this severity or above |
 | `rule-packs` | empty | Signed rule packs exported from Studio (paths, comma- or newline-separated). Needs sentinelctl 1.7.0 or newer |
-| `rule-pack-keys` | empty | Base64 Ed25519 keys a pack must be signed by. With a key set, any other pack is refused |
+| `rule-pack-keys` | empty | Base64 Ed25519 keys a pack must be signed by. With a key set, any other pack is refused; without one, the action warns |
 | `license-key` | empty | Accepted but not enforced: the action is free during early access |
 | `output-dir` | `sentinel-reports` | Where reports are written |
+| `artifact-name` | `sentinel-reports` | Name of the uploaded artifact. Must be unique per workflow run, so set it when you audit several binaries or use a matrix |
 | `sentinelctl-version` | `1.7.0` | Pin against the action major |
 
 ### Your own rules
@@ -85,10 +86,13 @@ you want to read.
 - **Linux, x86_64 or arm64.** The action picks `sentinelctl-amd64` or
   `sentinelctl-arm64` from `uname -m`. `ubuntu-latest` is the tested runner.
   Releases up to and including cli-v1.6.0 are x86_64 only, so pin 1.7.0 or
-  newer on arm64.
-- **Any distribution.** From 1.7.0 the binaries are fully static, so there is
-  no glibc requirement: Alpine, RHEL 9 and Amazon Linux 2023 work too.
-  (1.6.0 and earlier need glibc 2.35 or newer.)
+  newer on arm64. On a macOS runner the action stops with an error; install
+  the CLI there with `brew install sentinelden/tap/sentinelctl`.
+- **No glibc requirement.** From 1.7.0 the binaries are fully static, so RHEL 9
+  and Amazon Linux 2023 runners work as well as Ubuntu. (1.6.0 and earlier
+  need glibc 2.35 or newer.) The action's own steps need `bash`, `curl`,
+  `sha256sum` and `sort -V`; a minimal image such as Alpine needs
+  `apk add bash curl coreutils unzip` first.
 - **`unzip`** at `/usr/bin/unzip` for `.ipa`, `.apk` and `.aab` targets.
   GitHub-hosted Ubuntu runners have it; a minimal self-hosted image may not.
 

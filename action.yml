@@ -4,7 +4,8 @@
 #
 # Distribution: published to GitHub Marketplace as `sentinelden/sentinelctl-action`.
 # Pinning recommended: `sentinelden/sentinelctl-action@v1` (major tag,
-# moves with patches) or `@v1.0.0` (immutable).
+# moves with patches) or a full commit SHA (immutable, which is what makes
+# the digests pinned below worth having).
 #
 # Example usage in customer's .github/workflows/audit.yml:
 #
@@ -60,10 +61,10 @@ inputs:
   rule-pack-keys:
     description: >
       Newline- or comma-separated base64 Ed25519 public keys that a rule pack
-      must be signed by, passed to `sentinelctl --rules-key`. With this set, a
-      pack signed by any other key is refused rather than merely warned about.
-      Pin your own key here; leaving it empty accepts any signature the pack
-      carries.
+      must be signed by, passed to `sentinelctl --rules-key`. With this set, an
+      unsigned pack or one signed by any other key fails the job. Left empty,
+      a pack signed by any key loads, and the action warns that nothing is
+      pinned. Pin your own key here.
     required: false
     default: ''
   license-key:
@@ -74,6 +75,13 @@ inputs:
     default: ''
   output-dir:
     description: 'Directory to write report artifacts into.'
+    required: false
+    default: 'sentinel-reports'
+  artifact-name:
+    description: >
+      Name of the uploaded reports artifact. Artifact names must be unique in a
+      workflow run, so give each use its own name when one run audits more than
+      one binary or the action runs in a matrix.
     required: false
     default: 'sentinel-reports'
   # NOTE: this default names a GitHub RELEASE TAG (cli-v<version>) in the
@@ -108,6 +116,15 @@ runs:
         VERSION: ${{ inputs.sentinelctl-version }}
       run: |
         set -euo pipefail
+        # Linux only. Checked first because an Apple-silicon macOS runner
+        # reports `arm64` from uname -m and would otherwise download the Linux
+        # arm64 ELF, verify it, and fail only when it cannot execute.
+        OS=$(uname -s)
+        if [ "$OS" != "Linux" ]; then
+          echo "::error::sentinelctl-action runs on Linux runners only; this runner is ${OS}."
+          echo "::error::On macOS, install the CLI instead: brew install sentinelden/tap/sentinelctl"
+          exit 1
+        fi
         ARCH=$(uname -m)
         # From cli-v1.7.0 every release carries both architectures, built as
         # fully static binaries by Scripts/build-cli-linux.sh. cli-v1.6.0 and
@@ -133,9 +150,11 @@ runs:
         # file: workflow_dispatch inputs, reusable-workflow and composite-action
         # parameters, and repository or organization variables all feed it.
         #
-        # Same expression as release-linux-cli.yml:51, deliberately: the version
-        # that can be published and the version that can be requested must agree.
-        if ! printf '%s' "$VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+        # Same pattern as Scripts/promote-cli.sh, deliberately: the version that
+        # can be published and the version that can be requested must agree.
+        # Matched against the whole string: grep matches per line, so
+        # "1.7.0<newline>anything" used to pass.
+        if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
           echo "::error::sentinelctl-version '${VERSION}' is not a plain X.Y.Z version."
           exit 1
         fi
@@ -167,7 +186,8 @@ runs:
         if ! curl -sSLf -o "$STAGE" "$URL"; then
           echo "::error::Could not download sentinelctl ${VERSION} for ${ARCH}."
           echo "::error::Tried: ${URL}"
-          if [ "$ASSET" = "sentinelctl-arm64" ]; then
+          if [ "$ASSET" = "sentinelctl-arm64" ] \
+             && [ "$(printf '%s\n%s\n' 1.7.0 "$VERSION" | sort -V | head -1)" != "1.7.0" ]; then
             echo "::error::Releases up to and including cli-v1.6.0 published x86_64 only."
             echo "::error::Use sentinelctl-version 1.7.0 or newer on an arm64 runner,"
             echo "::error::or run this job on an x86_64 runner (ubuntu-latest is x86_64)."
@@ -274,6 +294,8 @@ runs:
         # newlines both separate, so a single-line workflow input and a YAML
         # block scalar behave the same.
         EXTRA=()
+        PACKS=0
+        KEYS=0
         # Entries are trimmed: the documented comma-separated form
         # ("./a.json, ./b.json") otherwise keeps the space after the comma, so
         # every entry but the first was passed as " ./b.json" — a path that
@@ -287,12 +309,20 @@ runs:
             exit 1
           fi
           EXTRA+=(--rules "$pack")
+          PACKS=$((PACKS + 1))
         done < <(printf '%s\n' "$RULE_PACKS" | tr ',' '\n')
         while IFS= read -r key; do
           key="$(trim "$key")"
           [ -n "$key" ] || continue
           EXTRA+=(--rules-key "$key")
+          KEYS=$((KEYS + 1))
         done < <(printf '%s\n' "$RULE_PACK_KEYS" | tr ',' '\n')
+        # An empty rule-pack-keys is easy to get by accident: an unset or
+        # misspelled repository variable expands to "". Say so, because the
+        # CLI accepts a pack signed by any key without a word in that case.
+        if [ "$PACKS" -gt 0 ] && [ "$KEYS" -eq 0 ]; then
+          echo "::warning::rule-packs is set but rule-pack-keys is empty, so a pack signed by any key is accepted. Pin your signing key."
+        fi
         if [ ${#EXTRA[@]} -gt 0 ]; then
           echo "Passing ${#EXTRA[@]} extra argument(s) for rule packs and pinned keys."
         fi
@@ -338,5 +368,5 @@ runs:
       if: always()
       uses: actions/upload-artifact@v4
       with:
-        name: sentinel-reports
+        name: ${{ inputs.artifact-name }}
         path: ${{ inputs.output-dir }}

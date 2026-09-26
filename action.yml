@@ -73,8 +73,9 @@ inputs:
     default: ''
   license-key:
     description: >
-      Accepted for forward compatibility and not enforced: sentinelctl is free
-      during early access. No key is validated, and the key is not sent anywhere.
+      Accepted so existing workflows keep working, and never enforced:
+      sentinelctl runs at Community level, free by design. No key is validated,
+      and the key is not sent anywhere.
     required: false
     default: ''
   output-dir:

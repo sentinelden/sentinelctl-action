@@ -46,7 +46,7 @@ crypto-misuse detection, and a policy gate that can fail the build.
 | `severity-threshold` | `high` | Non-zero exit at this severity or above |
 | `rule-packs` | empty | Signed rule packs exported from Studio (paths, comma- or newline-separated). Needs sentinelctl 1.7.0 or newer |
 | `rule-pack-keys` | empty | Base64 Ed25519 keys a pack must be signed by. With a key set, any other pack is refused; without one, the action warns |
-| `license-key` | empty | Accepted but not enforced: the action is free during early access |
+| `license-key` | empty | Accepted but not enforced: the action runs at Community level, free by design |
 | `output-dir` | `sentinel-reports` | Where reports are written |
 | `artifact-name` | `sentinel-reports` | Name of the uploaded artifact. Must be unique per workflow run, so set it when you audit several binaries or use a matrix |
 | `sentinelctl-version` | `1.7.1` | Pin against the action major |

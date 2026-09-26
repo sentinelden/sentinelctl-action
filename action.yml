@@ -93,7 +93,7 @@ inputs:
   sentinelctl-version:
     description: 'sentinelctl-linux version. Use to pin against the action major.'
     required: false
-    default: '1.7.0'
+    default: '1.7.1'
 
 outputs:
   sarif-path:
@@ -215,6 +215,8 @@ runs:
         # binaries with different digests, so a version-only table would pin
         # the amd64 digest onto an arm64 download and refuse every arm64 run.
         case "${VERSION}:${ASSET}" in
+          1.7.1:sentinelctl-amd64) PINNED=5682ac2dc393e13d9a2928018a53332cf64bab2ef927696efbd42fada41391a1 ;;
+          1.7.1:sentinelctl-arm64) PINNED=1fb5479ee07867b0121776cb8653b95bf1bd3764bbb2e9fdff4ba9c32d35d1ec ;;
           1.7.0:sentinelctl-amd64) PINNED=3f14d7a346ec3f71deadf8d1112a10016df2e88c6a1520604b63158bec7fb058 ;;
           1.7.0:sentinelctl-arm64) PINNED=ad552820611f7933d1a2664ca3d646b053121a00030e74d8c39c112475720391 ;;
           1.6.0:sentinelctl-amd64) PINNED=970cd4a33c7d431bd48224d98484a7a6e17ed73cee3ed29283e84b2b03a2a5ef ;;

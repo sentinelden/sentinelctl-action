@@ -16,12 +16,10 @@
 #         - uses: sentinelden/sentinelctl-action@v1
 #           with:
 #             binary: ./build/MyApp.ipa
-#             rules: masvs,hipaa
 #             severity-threshold: high
-#             license-key: ${{ secrets.SENTINEL_LICENSE_KEY }}
 #         - uses: github/codeql-action/upload-sarif@v3
 #           with:
-#             sarif_file: sentinel-report.sarif
+#             sarif_file: sentinel-reports/sentinel-report.sarif
 #
 
 name: 'SentinelDen Studio Audit'
@@ -35,7 +33,7 @@ branding:
 
 inputs:
   binary:
-    description: 'Path to the .ipa / .app / Mach-O binary to audit.'
+    description: 'Path to the .ipa, .app, .apk, .aab or Mach-O binary to audit.'
     required: true
   severity-threshold:
     description: >
@@ -46,13 +44,32 @@ inputs:
   rules:
     description: >
       Comma-separated rule-pack names (e.g., `masvs,hipaa,pci`).
-      Currently ignored in v1 (baseline rules only); reserved for v1.1.
+      NOT IMPLEMENTED: this input is accepted and ignored. The audit always
+      runs the built-in rules. Deliberately absent from the usage example
+      above, because setting it changes nothing and reads as if it does.
     required: false
     default: 'baseline'
+  rule-packs:
+    description: >
+      Newline- or comma-separated paths to signed rule-pack JSON files exported
+      from Studio, passed to `sentinelctl --rules`. This is how a private rule
+      pack reaches CI. Requires sentinelctl 1.7.0 or newer; an older binary
+      rejects the flag. Empty (the default) runs the built-in pack only.
+    required: false
+    default: ''
+  rule-pack-keys:
+    description: >
+      Newline- or comma-separated base64 Ed25519 public keys that a rule pack
+      must be signed by, passed to `sentinelctl --rules-key`. With this set, a
+      pack signed by any other key is refused rather than merely warned about.
+      Pin your own key here; leaving it empty accepts any signature the pack
+      carries.
+    required: false
+    default: ''
   license-key:
     description: >
-      sub_xxx license key. If empty, the action runs in preview mode
-      with no license check (severity threshold still applies).
+      Accepted for forward compatibility and not enforced: sentinelctl is free
+      during early access. No key is validated, and the key is not sent anywhere.
     required: false
     default: ''
   output-dir:
@@ -68,7 +85,7 @@ inputs:
   sentinelctl-version:
     description: 'sentinelctl-linux version. Use to pin against the action major.'
     required: false
-    default: '1.6.0'
+    default: '1.7.0'
 
 outputs:
   sarif-path:
@@ -92,18 +109,14 @@ runs:
       run: |
         set -euo pipefail
         ARCH=$(uname -m)
+        # From cli-v1.7.0 every release carries both architectures, built as
+        # fully static binaries by Scripts/build-cli-linux.sh. cli-v1.6.0 and
+        # earlier are x86_64 only, and the download failure below says so in
+        # those words rather than sending the user off to check whether the
+        # release exists.
         case "$ARCH" in
-          x86_64)  ASSET="sentinelctl-amd64" ;;
-          # No arm64 binary is published: release-linux-cli.yml builds amd64
-          # only. Mapping aarch64 to a nonexistent asset made arm64 runners fail
-          # later with "Could not download ... check that a release exists",
-          # which points the user at the wrong problem. ACTION.md already
-          # promises a clear architecture error, so give them one.
-          aarch64|arm64)
-            echo "::error::sentinelctl ships Linux x86_64 only. This runner is ${ARCH}."
-            echo "::error::Use an x86_64 runner (ubuntu-latest is x86_64)."
-            exit 1
-            ;;
+          x86_64)        ASSET="sentinelctl-amd64" ;;
+          aarch64|arm64) ASSET="sentinelctl-arm64" ;;
           *)
             echo "::error::Unsupported architecture: $ARCH"
             exit 1
@@ -154,7 +167,13 @@ runs:
         if ! curl -sSLf -o "$STAGE" "$URL"; then
           echo "::error::Could not download sentinelctl ${VERSION} for ${ARCH}."
           echo "::error::Tried: ${URL}"
-          echo "::error::Check that a release tagged cli-v${VERSION} exists with that asset."
+          if [ "$ASSET" = "sentinelctl-arm64" ]; then
+            echo "::error::Releases up to and including cli-v1.6.0 published x86_64 only."
+            echo "::error::Use sentinelctl-version 1.7.0 or newer on an arm64 runner,"
+            echo "::error::or run this job on an x86_64 runner (ubuntu-latest is x86_64)."
+          else
+            echo "::error::Check that a release tagged cli-v${VERSION} exists with that asset."
+          fi
           exit 1
         fi
 
@@ -172,10 +191,15 @@ runs:
         # binary actually served. That freezes today's artifact; it is not an
         # independent root of trust. Signing the release with a vendor key, and
         # verifying that here, is the durable fix.
-        case "$VERSION" in
-          1.6.0) PINNED=970cd4a33c7d431bd48224d98484a7a6e17ed73cee3ed29283e84b2b03a2a5ef ;;
-          1.5.0) PINNED=f4d5fddc596a984e35aed048cd20e6301c47c9cf240e614df079636c42eeb0af ;;
-          *)     PINNED="" ;;
+        # Keyed by version AND asset: the two architectures are different
+        # binaries with different digests, so a version-only table would pin
+        # the amd64 digest onto an arm64 download and refuse every arm64 run.
+        case "${VERSION}:${ASSET}" in
+          1.7.0:sentinelctl-amd64) PINNED=3f14d7a346ec3f71deadf8d1112a10016df2e88c6a1520604b63158bec7fb058 ;;
+          1.7.0:sentinelctl-arm64) PINNED=ad552820611f7933d1a2664ca3d646b053121a00030e74d8c39c112475720391 ;;
+          1.6.0:sentinelctl-amd64) PINNED=970cd4a33c7d431bd48224d98484a7a6e17ed73cee3ed29283e84b2b03a2a5ef ;;
+          1.5.0:sentinelctl-amd64) PINNED=f4d5fddc596a984e35aed048cd20e6301c47c9cf240e614df079636c42eeb0af ;;
+          *)                       PINNED="" ;;
         esac
 
         # Integrity check against the checksum published beside the binary.
@@ -229,6 +253,8 @@ runs:
         BINARY: ${{ inputs.binary }}
         OUTPUT_DIR: ${{ inputs.output-dir }}
         THRESHOLD: ${{ inputs.severity-threshold }}
+        RULE_PACKS: ${{ inputs.rule-packs }}
+        RULE_PACK_KEYS: ${{ inputs.rule-pack-keys }}
       run: |
         set -euo pipefail
         mkdir -p "$OUTPUT_DIR"
@@ -237,6 +263,40 @@ runs:
         JSON="$OUTPUT_DIR/sentinel-report.json"
         MD="$OUTPUT_DIR/sentinel-report.md"
 
+        # Rule packs and pinned keys are built into an argv array rather than
+        # a string. Note the '%s\n': without the trailing newline `read`
+        # returns non-zero on the final entry and the loop silently drops it,
+        # which made a single-pack input load nothing AND skipped the
+        # file-exists check on it — failing open on a typo'd path.
+        # A single pack is the common case, so this looked like it worked.
+        # a path is user-supplied data, and word-splitting one would
+        # let a space in a filename become a second argument. Commas and
+        # newlines both separate, so a single-line workflow input and a YAML
+        # block scalar behave the same.
+        EXTRA=()
+        # Entries are trimmed: the documented comma-separated form
+        # ("./a.json, ./b.json") otherwise keeps the space after the comma, so
+        # every entry but the first was passed as " ./b.json" — a path that
+        # fails the file check, and a --rules-key that silently never matches.
+        trim() { printf '%s' "$1" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//'; }
+        while IFS= read -r pack; do
+          pack="$(trim "$pack")"
+          [ -n "$pack" ] || continue
+          if [ ! -f "$pack" ]; then
+            echo "::error::rule-packs: no such file: $pack"
+            exit 1
+          fi
+          EXTRA+=(--rules "$pack")
+        done < <(printf '%s\n' "$RULE_PACKS" | tr ',' '\n')
+        while IFS= read -r key; do
+          key="$(trim "$key")"
+          [ -n "$key" ] || continue
+          EXTRA+=(--rules-key "$key")
+        done < <(printf '%s\n' "$RULE_PACK_KEYS" | tr ',' '\n')
+        if [ ${#EXTRA[@]} -gt 0 ]; then
+          echo "Passing ${#EXTRA[@]} extra argument(s) for rule packs and pinned keys."
+        fi
+
         EXIT=0
         "$SENTINELCTL" audit "$BINARY" \
           --min "$THRESHOLD" \
@@ -244,6 +304,7 @@ runs:
           --sbom "$SBOM" \
           --json "$JSON" \
           --markdown "$MD" \
+          ${EXTRA[@]+"${EXTRA[@]}"} \
           || EXIT=$?
 
         # Surface artifact paths for downstream steps regardless of

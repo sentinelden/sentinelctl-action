@@ -42,11 +42,26 @@ crypto-misuse detection, and a policy gate that can fail the build.
 
 | Input | Default | Notes |
 |---|---|---|
-| `binary` | required | Path to the `.ipa`, `.app`, `.apk` or Mach-O |
+| `binary` | required | Path to the `.ipa`, `.app`, `.apk`, `.aab` or Mach-O |
 | `severity-threshold` | `high` | Non-zero exit at this severity or above |
-| `license-key` | empty | Optional. Without one it runs in preview mode |
+| `rule-packs` | empty | Signed rule packs exported from Studio (paths, comma- or newline-separated). Needs sentinelctl 1.7.0 or newer |
+| `rule-pack-keys` | empty | Base64 Ed25519 keys a pack must be signed by. With a key set, any other pack is refused |
+| `license-key` | empty | Accepted but not enforced: the action is free during early access |
 | `output-dir` | `sentinel-reports` | Where reports are written |
-| `sentinelctl-version` | `1.6.0` | Pin against the action major |
+| `sentinelctl-version` | `1.7.0` | Pin against the action major |
+
+### Your own rules
+
+Export a rule pack from Studio, commit it, and pin the key it was signed with,
+so a pack signed by anyone else fails the job instead of loading:
+
+```yaml
+      - uses: sentinelden/sentinelctl-action@v1
+        with:
+          binary: ./build/MyApp.ipa
+          rule-packs: ./security/our-rules.sentinelpack.json
+          rule-pack-keys: ${{ vars.SENTINEL_RULE_PACK_KEY }}
+```
 
 ## Outputs
 
@@ -54,7 +69,8 @@ crypto-misuse detection, and a policy gate that can fail the build.
 
 ## Exit codes
 
-`0` clean, `2` findings at or above your threshold. Reports are written and
+`0` clean, `2` findings at or above your threshold, `1` bad input such as a
+missing binary or a rule pack that fails verification. Reports are written and
 uploaded as an artifact either way, because a failing gate is still a report
 you want to read.
 
@@ -63,18 +79,26 @@ you want to read.
 - **No PDF reports.** PDFKit is macOS-only. Use the Markdown report.
 - **No dynamic analysis.** Frida orchestration needs a device on a USB bus,
   which CI runners do not have. This is static analysis only.
-- **Linux x86_64 only** today. `ubuntu-latest` is the tested runner. arm64
-  runners will fail the architecture check with a clear message rather than
-  downloading the wrong binary.
-- **glibc 2.35 or newer.** GitHub's `ubuntu-22.04` and `ubuntu-latest`
-  runners qualify, as does Debian 12. A self-hosted RHEL 9 or Amazon Linux
-  2023 runner ships glibc 2.34 and cannot run the binary.
+
+## Runners
+
+- **Linux, x86_64 or arm64.** The action picks `sentinelctl-amd64` or
+  `sentinelctl-arm64` from `uname -m`. `ubuntu-latest` is the tested runner.
+  Releases up to and including cli-v1.6.0 are x86_64 only, so pin 1.7.0 or
+  newer on arm64.
+- **Any distribution.** From 1.7.0 the binaries are fully static, so there is
+  no glibc requirement: Alpine, RHEL 9 and Amazon Linux 2023 work too.
+  (1.6.0 and earlier need glibc 2.35 or newer.)
+- **`unzip`** at `/usr/bin/unzip` for `.ipa`, `.apk` and `.aab` targets.
+  GitHub-hosted Ubuntu runners have it; a minimal self-hosted image may not.
 
 ## Integrity
 
 The action downloads a binary and executes it against your build artifact
-inside your CI. It verifies the published SHA-256 before executing, and
-**fails closed** if no checksum is published. Verify a download yourself with:
+inside your CI. Before executing it, it checks the SHA-256 against the
+checksum published beside the binary and against a digest committed in this
+action for that version and architecture, and it **fails closed** if either
+check fails or no checksum is published. Verify a download yourself with:
 
 ```bash
 sha256sum -c sentinelctl-amd64.sha256
@@ -83,8 +107,8 @@ sha256sum -c sentinelctl-amd64.sha256
 ## Privacy
 
 The audit runs entirely on your runner. Your binary is never uploaded
-anywhere. Without a `license-key` the action makes no network call except to
-download the CLI itself.
+anywhere. The only network call the action makes is downloading the CLI
+itself; a `license-key` is not sent anywhere.
 
 ## Licence
 

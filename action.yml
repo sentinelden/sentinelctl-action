@@ -23,7 +23,11 @@
 #             sarif_file: sentinel-reports/sentinel-report.sarif
 #
 
-name: 'SentinelDen Studio Audit'
+# Marketplace names must be unique. The original 'SentinelDen Studio Audit'
+# listing was lost when this repository was recreated on 2026-09-25, and GitHub
+# fails with a server error when the name is published again, so the Action is
+# listed under this name. It only affects the Marketplace; `uses:` is unchanged.
+name: 'SentinelDen Studio Audit Action'
 # Marketplace hard-caps this at 125 characters and rejects the release if it
 # is longer. Keep any future edit under that; the previous wording was 131.
 description: 'Audit your iOS or Android build in CI. Findings land in GitHub code scanning via SARIF.'

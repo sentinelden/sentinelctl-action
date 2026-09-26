@@ -66,6 +66,9 @@ you want to read.
 - **Linux x86_64 only** today. `ubuntu-latest` is the tested runner. arm64
   runners will fail the architecture check with a clear message rather than
   downloading the wrong binary.
+- **glibc 2.35 or newer.** GitHub's `ubuntu-22.04` and `ubuntu-latest`
+  runners qualify, as does Debian 12. A self-hosted RHEL 9 or Amazon Linux
+  2023 runner ships glibc 2.34 and cannot run the binary.
 
 ## Integrity
 

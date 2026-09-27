@@ -49,7 +49,7 @@ crypto-misuse detection, and a policy gate that can fail the build.
 | `license-key` | empty | Accepted but not enforced: the action runs at Community level, free by design |
 | `output-dir` | `sentinel-reports` | Where reports are written |
 | `artifact-name` | `sentinel-reports` | Name of the uploaded artifact. Must be unique per workflow run, so set it when you audit several binaries or use a matrix |
-| `sentinelctl-version` | `1.7.2` | Pin against the action major |
+| `sentinelctl-version` | `1.8.4` | Pin against the action major |
 
 ### Your own rules
 

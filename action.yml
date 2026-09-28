@@ -98,14 +98,14 @@ inputs:
   sentinelctl-version:
     description: 'sentinelctl-linux version. Use to pin against the action major.'
     required: false
-    default: '1.8.5'
+    default: '1.9.0'
 
 outputs:
   sarif-path:
     description: 'Path to the SARIF 2.1 report (suitable for github/codeql-action/upload-sarif).'
     value: ${{ steps.run.outputs.sarif-path }}
   sbom-path:
-    description: 'Path to the CycloneDX 1.5 SBOM.'
+    description: 'Path to the CycloneDX 1.6 SBOM.'
     value: ${{ steps.run.outputs.sbom-path }}
   finding-count:
     description: 'Total findings discovered.'
@@ -222,6 +222,8 @@ runs:
         case "${VERSION}:${ASSET}" in
           1.8.5:sentinelctl-amd64) PINNED=98737f4dc0cc1e12e2f13f42ad24c1d288610e2e289530b19b02d532ecce1b78 ;;
           1.8.5:sentinelctl-arm64) PINNED=4e893b74e1cf95f7e10daf6f181fb43917aca9c992a6477699cc47d9d128fd5b ;;
+          1.9.0:sentinelctl-amd64) PINNED=8f10e80561c3919f927264a6827444fef4532d607c3e6c979d5af37a3ec558a5 ;;
+          1.9.0:sentinelctl-arm64) PINNED=c9a0d066c15efa030680cfd9fd176eca7f2b8bcf68bfd836527db2b3427dd6d8 ;;
           1.8.4:sentinelctl-amd64) PINNED=565a37fb2b52163a39fa32d0f3bbc69d35579b76ed871eaf257d232ecf24a621 ;;
           1.8.4:sentinelctl-arm64) PINNED=0d5f2f6315b7fdfbef89acd49a233c06635a8f74c1711fabbd47d9499b013b78 ;;
           1.7.2:sentinelctl-amd64) PINNED=05991c22982af3c8baeb63a4874351d9664fa2a77a4ecd17435ab01c20e29370 ;;

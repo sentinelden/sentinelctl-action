@@ -98,7 +98,7 @@ inputs:
   sentinelctl-version:
     description: 'sentinelctl-linux version. Use to pin against the action major.'
     required: false
-    default: '1.13.0'
+    default: '1.14.0'
 
 outputs:
   sarif-path:
@@ -232,6 +232,8 @@ runs:
           1.11.0:sentinelctl-arm64) PINNED=ac3182d806043a57107b14eb7a344b27a6576ee5d053eb1b4757c6df6d284cc7 ;;
           1.13.0:sentinelctl-amd64) PINNED=bf58c5f2b3a7e51fce78f23f790c633aa8a755ed6d5acf5d92b5ee316b6157b4 ;;
           1.13.0:sentinelctl-arm64) PINNED=0c07da2ed501191db505e2532919351ae8791026eb42ba3696054fe51e85d8d4 ;;
+          1.14.0:sentinelctl-amd64) PINNED=cfe53955ee2ec2685fa86d24704ec1f79d42d182e8b8f7698236d12bb64e77f6 ;;
+          1.14.0:sentinelctl-arm64) PINNED=f44ce4b2273043de772d4a434b013bd7ea5dd4dfd67ddc874b33b20f842bdd40 ;;
           1.10.2:sentinelctl-amd64) PINNED=02f9111209cc9b226876c989166d335901186b44054c31c321299720c7e04c78 ;;
           1.10.2:sentinelctl-arm64) PINNED=7fad812b480cca6bd03162610d19805706764f9cdad38a30c5089b260482c037 ;;
           1.10.0:sentinelctl-amd64) PINNED=09ea43273ee6a49fd6b5728d4326d3fb56e60dbba5ec6391e874d2e52e39fa50 ;;

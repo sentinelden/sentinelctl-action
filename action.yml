@@ -1,4 +1,4 @@
-# SentinelDen Studio audit — published GitHub Action wrapper for
+# SentinelDen Studio audit, the published GitHub Action wrapper for
 # sentinelctl-linux. Customers consume this directly in their workflow
 # YAML; they don't have to think about Docker / binaries / paths.
 #
@@ -34,7 +34,8 @@ description: 'Audit your iOS or Android build in CI. Findings land in GitHub cod
 author: 'Sentinel Den'
 branding:
   icon: 'shield'
-  color: 'blue'
+  # The nearest Marketplace colour to the Sentinel Amber brand gold.
+  color: 'yellow'
 
 inputs:
   binary:
@@ -318,7 +319,7 @@ runs:
         # a string. Note the '%s\n': without the trailing newline `read`
         # returns non-zero on the final entry and the loop silently drops it,
         # which made a single-pack input load nothing AND skipped the
-        # file-exists check on it — failing open on a typo'd path.
+        # file-exists check on it, failing open on a typo'd path.
         # A single pack is the common case, so this looked like it worked.
         # a path is user-supplied data, and word-splitting one would
         # let a space in a filename become a second argument. Commas and
@@ -329,7 +330,7 @@ runs:
         KEYS=0
         # Entries are trimmed: the documented comma-separated form
         # ("./a.json, ./b.json") otherwise keeps the space after the comma, so
-        # every entry but the first was passed as " ./b.json" — a path that
+        # every entry but the first was passed as " ./b.json": a path that
         # fails the file check, and a --rules-key that silently never matches.
         trim() { printf '%s' "$1" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//'; }
         while IFS= read -r pack; do
@@ -369,7 +370,7 @@ runs:
           || EXIT=$?
 
         # Surface artifact paths for downstream steps regardless of
-        # the audit's exit code — failing the build is the action's
+        # the audit's exit code: failing the build is the action's
         # job, but the report itself is still useful.
         echo "sarif-path=$SARIF" >> "$GITHUB_OUTPUT"
         echo "sbom-path=$SBOM"   >> "$GITHUB_OUTPUT"

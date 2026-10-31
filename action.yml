@@ -99,7 +99,7 @@ inputs:
   sentinelctl-version:
     description: 'sentinelctl-linux version. Use to pin against the action major.'
     required: false
-    default: '1.18.0'
+    default: '1.19.0'
 
 outputs:
   sarif-path:
@@ -170,7 +170,7 @@ runs:
         # CI gate to an engine that predates the detectors it is supposed to
         # run. Enforce a floor as well as a shape: the current and the previous
         # minor release are supported.
-        MIN_VERSION="1.17.0"
+        MIN_VERSION="1.18.0"
         if [ "$(printf '%s\n%s\n' "$MIN_VERSION" "$VERSION" | sort -V | head -1)" != "$MIN_VERSION" ]; then
           echo "::error::sentinelctl-version '${VERSION}' is older than the minimum supported ${MIN_VERSION}."
           echo "::error::Older engines miss detectors this action's results are assumed to include."
@@ -248,6 +248,8 @@ runs:
           1.17.0:sentinelctl-arm64) PINNED=5ae0bf36061e82dd5cecb1eeaed02dfa4bdff79c495bae9fe29cfa9ac10c07b2 ;;
           1.18.0:sentinelctl-amd64) PINNED=cbe62aab2a0ee8737025d774f1024a38ed2fd24b78f7f597c52204262c4e81d8 ;;
           1.18.0:sentinelctl-arm64) PINNED=14a68d2da51f4f400c00b09eead77ee3492eda721188d1292ab154f7c68f9656 ;;
+          1.19.0:sentinelctl-amd64) PINNED=3b701cb2dc13d5dd51801b080737b8a0575b26457ea16d82ac85a01fae0e681c ;;
+          1.19.0:sentinelctl-arm64) PINNED=182b103e76a9a7e4dd7bfac70d7c0e4fd29873e31a772120b4aebcd9624f8c30 ;;
           1.10.2:sentinelctl-amd64) PINNED=02f9111209cc9b226876c989166d335901186b44054c31c321299720c7e04c78 ;;
           1.10.2:sentinelctl-arm64) PINNED=7fad812b480cca6bd03162610d19805706764f9cdad38a30c5089b260482c037 ;;
           1.10.0:sentinelctl-amd64) PINNED=09ea43273ee6a49fd6b5728d4326d3fb56e60dbba5ec6391e874d2e52e39fa50 ;;

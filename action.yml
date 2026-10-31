@@ -168,8 +168,9 @@ runs:
         # A shape check alone is not enough: any older published version is
         # still well-formed, so whoever controls the input can silently pin the
         # CI gate to an engine that predates the detectors it is supposed to
-        # run. Enforce a floor as well as a shape.
-        MIN_VERSION="1.5.0"
+        # run. Enforce a floor as well as a shape: the current and the previous
+        # minor release are supported.
+        MIN_VERSION="1.17.0"
         if [ "$(printf '%s\n%s\n' "$MIN_VERSION" "$VERSION" | sort -V | head -1)" != "$MIN_VERSION" ]; then
           echo "::error::sentinelctl-version '${VERSION}' is older than the minimum supported ${MIN_VERSION}."
           echo "::error::Older engines miss detectors this action's results are assumed to include."

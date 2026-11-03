@@ -72,6 +72,40 @@ inputs:
       pinned. Pin your own key here.
     required: false
     default: ''
+  notes:
+    description: >
+      Path to a notes file exported from Studio's Research workbench, passed to
+      `sentinelctl audit --notes`. Each note is reported as a finding, marked as
+      a person's note, that says whether its evidence still holds in this build.
+      Needs sentinelctl 1.20.0 or newer.
+    required: false
+    default: ''
+  require-protections:
+    description: >
+      Comma-separated protections this build must have, such as
+      `anti-debug,runtime-guard`, passed to `sentinelctl protections --require`.
+      The job fails unless each has a strong site that could run. Empty (the
+      default) skips the check. Needs sentinelctl 1.20.0 or newer.
+    required: false
+    default: ''
+  privacy-manifest:
+    description: >
+      Path to this build's PrivacyInfo.xcprivacy. Set with
+      `privacy-manifest-baseline` to run `sentinelctl privacy-diff`. Empty (the
+      default) skips the check. Needs sentinelctl 1.20.0 or newer.
+    required: false
+    default: ''
+  privacy-manifest-baseline:
+    description: 'Path to the PrivacyInfo.xcprivacy to compare against, usually the last release.'
+    required: false
+    default: ''
+  privacy-manifest-declared:
+    description: >
+      Path to a text file naming each expected change by its identifier, reason
+      code or domain. The job fails on any change it does not name. Left empty,
+      every change fails the job.
+    required: false
+    default: ''
   license-key:
     description: >
       Accepted so existing workflows keep working, and never enforced:
@@ -99,7 +133,7 @@ inputs:
   sentinelctl-version:
     description: 'sentinelctl-linux version. Use to pin against the action major.'
     required: false
-    default: '1.19.0'
+    default: '1.20.0'
 
 outputs:
   sarif-path:
@@ -170,7 +204,7 @@ runs:
         # CI gate to an engine that predates the detectors it is supposed to
         # run. Enforce a floor as well as a shape: the current and the previous
         # minor release are supported.
-        MIN_VERSION="1.18.0"
+        MIN_VERSION="1.19.0"
         if [ "$(printf '%s\n%s\n' "$MIN_VERSION" "$VERSION" | sort -V | head -1)" != "$MIN_VERSION" ]; then
           echo "::error::sentinelctl-version '${VERSION}' is older than the minimum supported ${MIN_VERSION}."
           echo "::error::Older engines miss detectors this action's results are assumed to include."
@@ -248,6 +282,8 @@ runs:
           1.17.0:sentinelctl-arm64) PINNED=5ae0bf36061e82dd5cecb1eeaed02dfa4bdff79c495bae9fe29cfa9ac10c07b2 ;;
           1.18.0:sentinelctl-amd64) PINNED=cbe62aab2a0ee8737025d774f1024a38ed2fd24b78f7f597c52204262c4e81d8 ;;
           1.18.0:sentinelctl-arm64) PINNED=14a68d2da51f4f400c00b09eead77ee3492eda721188d1292ab154f7c68f9656 ;;
+          1.20.0:sentinelctl-amd64) PINNED=35df5c1f50bf56923213435cda8b431ccd0ad695ba6dbd2e5066886bab0adc04 ;;
+          1.20.0:sentinelctl-arm64) PINNED=0618ec68406e49f4616d48d8dda8ca20c8ca722542a4b79982f3e6d8757f0571 ;;
           1.19.0:sentinelctl-amd64) PINNED=3b701cb2dc13d5dd51801b080737b8a0575b26457ea16d82ac85a01fae0e681c ;;
           1.19.0:sentinelctl-arm64) PINNED=182b103e76a9a7e4dd7bfac70d7c0e4fd29873e31a772120b4aebcd9624f8c30 ;;
           1.10.2:sentinelctl-amd64) PINNED=02f9111209cc9b226876c989166d335901186b44054c31c321299720c7e04c78 ;;
@@ -322,9 +358,38 @@ runs:
         THRESHOLD: ${{ inputs.severity-threshold }}
         RULE_PACKS: ${{ inputs.rule-packs }}
         RULE_PACK_KEYS: ${{ inputs.rule-pack-keys }}
+        VERSION: ${{ inputs.sentinelctl-version }}
+        NOTES: ${{ inputs.notes }}
+        REQUIRE_PROTECTIONS: ${{ inputs.require-protections }}
+        PRIVACY_NEW: ${{ inputs.privacy-manifest }}
+        PRIVACY_OLD: ${{ inputs.privacy-manifest-baseline }}
+        PRIVACY_DECLARED: ${{ inputs.privacy-manifest-declared }}
       run: |
         set -euo pipefail
         mkdir -p "$OUTPUT_DIR"
+
+        # These inputs need 1.20.0. An older pinned binary would stop on an
+        # unknown argument, which reads as a CLI fault rather than a pin to raise.
+        if [ -n "$NOTES$REQUIRE_PROTECTIONS$PRIVACY_NEW$PRIVACY_OLD$PRIVACY_DECLARED" ] \
+           && [ "$(printf '%s\n%s\n' 1.20.0 "$VERSION" | sort -V | head -1)" != "1.20.0" ]; then
+          echo "::error::notes, require-protections and the privacy-manifest inputs need sentinelctl 1.20.0 or newer; this job pins ${VERSION}."
+          exit 1
+        fi
+        # All paths are checked here, before the audit. One manifest without the
+        # other is an error rather than a skip: an unset repository variable
+        # expands to "", and a gate that quietly stops running looks like a pass.
+        if [ -n "$PRIVACY_NEW$PRIVACY_OLD$PRIVACY_DECLARED" ] \
+           && { [ -z "$PRIVACY_NEW" ] || [ -z "$PRIVACY_OLD" ]; }; then
+          echo "::error::privacy-manifest and privacy-manifest-baseline must be set together."
+          exit 1
+        fi
+        for f in "$NOTES" "$PRIVACY_NEW" "$PRIVACY_OLD" "$PRIVACY_DECLARED"; do
+          if [ -n "$f" ] && [ ! -f "$f" ]; then
+            echo "::error::no such file: $f"
+            exit 1
+          fi
+        done
+
         SARIF="$OUTPUT_DIR/sentinel-report.sarif"
         SBOM="$OUTPUT_DIR/sentinel-sbom.cyclonedx.json"
         JSON="$OUTPUT_DIR/sentinel-report.json"
@@ -373,6 +438,9 @@ runs:
         if [ ${#EXTRA[@]} -gt 0 ]; then
           echo "Passing ${#EXTRA[@]} extra argument(s) for rule packs and pinned keys."
         fi
+        if [ -n "$NOTES" ]; then
+          EXTRA+=(--notes "$NOTES")
+        fi
 
         EXIT=0
         "$SENTINELCTL" audit "$BINARY" \
@@ -407,8 +475,31 @@ runs:
         echo "finding-count=$COUNT" >> "$GITHUB_OUTPUT"
         echo "sentinelctl found ${COUNT} finding(s); threshold is ${THRESHOLD}."
 
-        # Re-raise the original exit code so the workflow status
-        # reflects the audit verdict.
+        # These two run even when the audit gate failed, so one run reports
+        # everything. Each writes a report beside the others. Spaces are removed
+        # because the CLI reads "a, b" as a protection named " b".
+        if [ -n "$REQUIRE_PROTECTIONS" ]; then
+          GATE=0
+          "$SENTINELCTL" protections "$BINARY" --require "$(printf '%s' "$REQUIRE_PROTECTIONS" | tr -d '[:space:]')" \
+            | tee "$OUTPUT_DIR/sentinel-protections.txt" || GATE=$?
+          if [ "$GATE" -ne 0 ]; then
+            echo "::error::Protections check failed; see sentinel-protections.txt in the reports."
+            if [ "$EXIT" -eq 0 ]; then EXIT=$GATE; fi
+          fi
+        fi
+        if [ -n "$PRIVACY_NEW" ]; then
+          DECLARED=()
+          if [ -n "$PRIVACY_DECLARED" ]; then DECLARED=(--declared "$PRIVACY_DECLARED"); fi
+          GATE=0
+          "$SENTINELCTL" privacy-diff "$PRIVACY_OLD" "$PRIVACY_NEW" ${DECLARED[@]+"${DECLARED[@]}"} \
+            | tee "$OUTPUT_DIR/sentinel-privacy-diff.txt" || GATE=$?
+          if [ "$GATE" -ne 0 ]; then
+            echo "::error::Privacy manifest check failed; see sentinel-privacy-diff.txt in the reports."
+            if [ "$EXIT" -eq 0 ]; then EXIT=$GATE; fi
+          fi
+        fi
+
+        # Re-raise the first failure so the workflow status reflects the verdict.
         exit "$EXIT"
 
     - name: Upload reports as artifact

@@ -46,10 +46,14 @@ crypto-misuse detection, and a policy gate that can fail the build.
 | `severity-threshold` | `high` | Non-zero exit at this severity or above |
 | `rule-packs` | empty | Signed rule packs exported from Studio (paths, comma- or newline-separated). Needs sentinelctl 1.7.0 or newer |
 | `rule-pack-keys` | empty | Base64 Ed25519 keys a pack must be signed by. With a key set, any other pack is refused; without one, the action warns |
+| `notes` | empty | Notes file exported from Studio's Research workbench. Each note is reported as a finding that says whether its evidence still holds. Needs sentinelctl 1.20.0 or newer |
+| `require-protections` | empty | Protections this build must have, comma-separated: `jailbreak-detection`, `anti-debug`, `hook-detection`, `tamper-detection`, `certificate-pinning`, `attestation`, `runtime-guard`. Needs 1.20.0 or newer |
+| `privacy-manifest`, `privacy-manifest-baseline` | empty | This build's `PrivacyInfo.xcprivacy` and the one to compare it with. Set both or neither. Needs 1.20.0 or newer |
+| `privacy-manifest-declared` | empty | Text file naming each expected manifest change. Any change it does not name fails the job |
 | `license-key` | empty | Accepted but not enforced: the action runs at Community level, free by design |
 | `output-dir` | `sentinel-reports` | Where reports are written |
 | `artifact-name` | `sentinel-reports` | Name of the uploaded artifact. Must be unique per workflow run, so set it when you audit several binaries or use a matrix |
-| `sentinelctl-version` | `1.19.0` | Pin against the action major |
+| `sentinelctl-version` | `1.20.0` | Pin against the action major |
 
 ### Your own rules
 
@@ -64,14 +68,35 @@ so a pack signed by anyone else fails the job instead of loading:
           rule-pack-keys: ${{ vars.SENTINEL_RULE_PACK_KEY }}
 ```
 
+### Gates for protections and privacy manifests
+
+Fail the job when a protection is missing, or when the privacy manifest changes
+and nobody said so:
+
+```yaml
+      - uses: sentinelden/sentinelctl-action@v1
+        with:
+          binary: ./build/MyApp.ipa
+          require-protections: anti-debug,runtime-guard
+          privacy-manifest: ./MyApp/PrivacyInfo.xcprivacy
+          privacy-manifest-baseline: ./security/PrivacyInfo.last-release.xcprivacy
+          privacy-manifest-declared: ./security/privacy-changes.txt
+```
+
+A protection passes when it has a strong site that could run. This is static
+analysis: a check whose strings are encrypted or built at runtime does not show,
+and a path is not proof that it runs. Both gates write a report beside the others,
+`sentinel-protections.txt` and `sentinel-privacy-diff.txt`, and both run even when
+the audit gate has failed.
+
 ## Outputs
 
 `sarif-path`, `sbom-path`, `finding-count`.
 
 ## Exit codes
 
-`0` clean, `2` findings at or above your threshold, `1` bad input such as a
-missing binary or a rule pack that fails verification. Reports are written and
+`0` clean, `2` findings at or above your threshold or a gate that failed, `1` bad
+input such as a missing binary or a rule pack that fails verification. Reports are written and
 uploaded as an artifact either way, because a failing gate is still a report
 you want to read.
 
